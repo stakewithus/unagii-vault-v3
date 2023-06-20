@@ -18,13 +18,6 @@ abstract contract Strategy is Ownership {
 	Vault public immutable vault;
 	ERC20 public immutable asset;
 
-	/// @notice address which performance fees are sent to
-	address public treasury;
-	/// @notice performance fee sent to treasury / FEE_BASIS of 10_000
-	uint16 public fee = 1_000;
-	uint16 internal constant MAX_FEE = 1_000;
-	uint16 internal constant FEE_BASIS = 10_000;
-
 	/// @notice used to calculate slippage / SLIP_BASIS of 10_000
 	/// @dev default to 99% (or 1%)
 	uint16 public slip = 9_900;
@@ -49,14 +42,12 @@ abstract contract Strategy is Ownership {
 
 	constructor(
 		Vault _vault,
-		address _treasury,
 		address _nominatedOwner,
 		address _admin,
 		address[] memory _authorized
 	) Ownership(_nominatedOwner, _admin, _authorized) {
 		vault = _vault;
 		asset = vault.asset();
-		treasury = _treasury;
 	}
 
 	/*//////////////////////////
@@ -70,15 +61,7 @@ abstract contract Strategy is Ownership {
 	/      Restricted Functions: onlyVault      /
 	///////////////////////////////////////////*/
 
-	function withdraw(uint256 _assets)
-		external
-		onlyVault
-		returns (
-			uint256 received,
-			uint256 slippage,
-			uint256 bonus
-		)
-	{
+	function withdraw(uint256 _assets) external onlyVault returns (uint256 received, uint256 slippage, uint256 bonus) {
 		uint256 total = totalAssets();
 		if (total == 0) revert Zero();
 
@@ -104,35 +87,11 @@ abstract contract Strategy is Ownership {
 		_harvest();
 
 		received = asset.balanceOf(address(this));
-
-		if (fee > 0) {
-			uint256 feeAmount = _calculateFee(received);
-			received -= feeAmount;
-			asset.safeTransfer(treasury, feeAmount);
-		}
-
-		asset.safeTransfer(address(vault), received);
+		if (received > 0) asset.safeTransfer(address(vault), received);
 	}
 
 	function invest() external onlyAdminOrVault {
 		_invest();
-	}
-
-	/*///////////////////////////////////////////
-	/      Restricted Functions: onlyOwner      /
-	///////////////////////////////////////////*/
-
-	function setFee(uint16 _fee) external onlyOwner {
-		if (_fee > MAX_FEE) revert InvalidValue();
-		if (_fee == fee) revert AlreadyValue();
-		fee = _fee;
-		emit FeeChanged(_fee);
-	}
-
-	function setTreasury(address _treasury) external onlyOwner {
-		if (_treasury == treasury) revert AlreadyValue();
-		treasury = _treasury;
-		emit TreasuryChanged(_treasury);
 	}
 
 	/*////////////////////////////////////////////
@@ -163,10 +122,6 @@ abstract contract Strategy is Ownership {
 
 	function _calculateSlippage(uint256 _amount) internal view returns (uint256) {
 		return _amount.mulDivDown(slip, SLIP_BASIS);
-	}
-
-	function _calculateFee(uint256 _amount) internal view returns (uint256) {
-		return _amount.mulDivDown(fee, FEE_BASIS);
 	}
 
 	modifier onlyVault() {
