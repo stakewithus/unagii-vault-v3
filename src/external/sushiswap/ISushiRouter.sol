@@ -5,19 +5,19 @@ pragma solidity 0.8.9;
 // it's actually a UniswapV2Router02 but renamed for clarity vs actual uniswap
 
 interface ISushiRouter {
-	function swapExactTokensForTokens(
-		uint256 amountIn,
-		uint256 amountOutMin,
-		address[] calldata path,
-		address to,
-		uint256 deadline
-	) external returns (uint256[] memory amounts);
+    function swapExactTokensForTokens(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
 
-	function swapExactTokensForETH(
-		uint256 amountIn,
-		uint256 amountOutMin,
-		address[] calldata path,
-		address to,
-		uint256 deadline
-	) external returns (uint256[] memory amounts);
+    function swapExactTokensForETH(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
 }
