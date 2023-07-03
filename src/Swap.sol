@@ -90,6 +90,7 @@ contract Swap is Ownable {
 
         _setRoute(USDC, USDT, RouteInfo({route: Route.UniswapV3Direct, info: abi.encode(uint24(100))}));
 
+        // STG -> bb-a-USD -> bb-a-USDC -> USDC
         IAsset[] memory assets = new IAsset[](4);
         assets[0] = IAsset(STG);
         assets[1] = IAsset(0xA13a9247ea42D743238089903570127DdA72fE44); // bb-a-USD
@@ -126,6 +127,30 @@ contract Swap is Ownable {
         });
 
         _setRoute(STG, USDC, RouteInfo({route: Route.BalancerBatch, info: abi.encode(steps, assets)}));
+
+        // STG -> bb-a-USD -> B-stETH-stable -> WETH
+        assets[2] = IAsset(0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0);
+        assets[3] = IAsset(WETH);
+
+        // bb-a-USD -> B-stETH-stable
+        steps[1] = IVault.BatchSwapStep({
+            poolId: 0x25accb7943fd73dda5e23ba6329085a3c24bfb6a000200000000000000000387,
+            assetInIndex: 1,
+            assetOutIndex: 2,
+            amount: 0,
+            userData: ""
+        });
+
+        // B-stETH-stable -> WETH
+        steps[2] = IVault.BatchSwapStep({
+            poolId: 0x32296969ef14eb0c6d29669c550d4a0449130230000200000000000000000080,
+            assetInIndex: 2,
+            assetOutIndex: 3,
+            amount: 0,
+            userData: ""
+        });
+
+        _setRoute(STG, WETH, RouteInfo({route: Route.BalancerBatch, info: abi.encode(steps, assets)}));
 
         _setRoute(
             BAL,

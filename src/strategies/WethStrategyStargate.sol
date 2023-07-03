@@ -1,24 +1,29 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity 0.8.9;
 
-import "../external/stargate/Interfaces.sol";
+import "forge-std/console.sol";
+
+import {WETH} from "solmate/tokens/WETH.sol";
+import {IStargateRouter, ILPStaking, LPTokenERC20} from "../external/stargate/Interfaces.sol";
 import "../Swap.sol";
 import "../Strategy.sol";
 
-abstract contract StrategyStargate is Strategy {
+contract WethStrategyStargate is Strategy {
     using SafeTransferLib for ERC20;
     using SafeTransferLib for LPTokenERC20;
+    using SafeTransferLib for WETH;
     using FixedPointMathLib for uint256;
 
     IStargateRouter internal constant router = IStargateRouter(0x8731d54E9D02c286767d56ac03e8037C07e01e98);
     ILPStaking internal constant staking = ILPStaking(0xB0D502E938ed5f4df2E681fE6E419ff29631d62b);
     ERC20 internal constant STG = ERC20(0xAf5191B0De278C7286d6C7CC6ab6BB8A73bA2Cd6);
+    WETH internal constant SGETH = WETH(payable(0x72E2F4830b9E45d52F80aC08CB2bEC0FeF72eD9c));
 
     /// @dev pid of asset in their router
-    uint16 public immutable routerPoolId;
+    uint16 public constant routerPoolId = 13;
     /// @dev pid of asset in their LP staking contract
-    uint256 public immutable stakingPoolId;
-    LPTokenERC20 public immutable lpToken;
+    uint256 public constant stakingPoolId = 2;
+    LPTokenERC20 public constant lpToken = LPTokenERC20(0x101816545F6bd2b1076434B54383a1E633390A2E);
 
     /// @notice contract used to swap STG rewards to asset
     Swap public swap;
@@ -37,15 +42,9 @@ abstract contract StrategyStargate is Strategy {
         address _nominatedOwner,
         address _admin,
         address[] memory _authorized,
-        Swap _swap,
-        uint16 _routerPoolId,
-        uint256 _stakingPoolId
+        Swap _swap
     ) Strategy(_vault, _treasury, _nominatedOwner, _admin, _authorized) {
         swap = _swap;
-        routerPoolId = _routerPoolId;
-        stakingPoolId = _stakingPoolId;
-        (address lpTokenAddress,,,) = staking.poolInfo(stakingPoolId);
-        lpToken = LPTokenERC20(lpTokenAddress);
 
         _approve();
     }
@@ -104,7 +103,7 @@ abstract contract StrategyStargate is Strategy {
             _dstChainId,
             routerPoolId,
             routerPoolId,
-            payable(msg.sender),
+            payable(address(this)),
             lpAmount,
             abi.encodePacked(address(vault)),
             _lzTxObj
@@ -125,9 +124,13 @@ abstract contract StrategyStargate is Strategy {
         staking.withdraw(stakingPoolId, lpAmount);
 
         // withdraw from stargate router
-        received = router.instantRedeemLocal(routerPoolId, lpAmount, address(vault));
+        received = router.instantRedeemLocal(routerPoolId, lpAmount, address(this));
 
         if (received < _calculateSlippage(_assets)) revert BelowMinimum(received);
+
+        // router instantRedeemLocal withdraws and unwraps to raw ETH
+        WETH(payable(address(asset))).deposit{value: received}();
+        asset.safeTransfer(address(vault), received);
     }
 
     function _harvest() internal override {
@@ -144,6 +147,8 @@ abstract contract StrategyStargate is Strategy {
         uint256 assetBalance = asset.balanceOf(address(this));
         if (assetBalance == 0) revert NothingToInvest();
 
+        _convertWethToSgeth(assetBalance);
+
         router.addLiquidity(routerPoolId, assetBalance, address(this));
 
         uint256 balance = lpToken.balanceOf(address(this));
@@ -158,8 +163,8 @@ abstract contract StrategyStargate is Strategy {
     //////////////////////////////*/
 
     function _approve() internal {
-        // approve deposit asset into router
-        asset.safeApprove(address(router), type(uint256).max);
+        // approve deposit SGETH into router
+        SGETH.approve(address(router), type(uint256).max);
         // approve deposit lpToken into staking contract
         lpToken.safeApprove(address(staking), type(uint256).max);
 
@@ -167,7 +172,7 @@ abstract contract StrategyStargate is Strategy {
     }
 
     function _unapprove() internal {
-        asset.safeApprove(address(router), 0);
+        SGETH.approve(address(router), 0);
         lpToken.safeApprove(address(staking), 0);
 
         _unapproveSwap();
@@ -181,6 +186,18 @@ abstract contract StrategyStargate is Strategy {
     // approve swap rewards to asset
     function _approveSwap() internal {
         STG.safeApprove(address(swap), type(uint256).max);
+    }
+
+    function _convertWethToSgeth(uint256 _amount) internal {
+        WETH(payable(address(asset))).withdraw(_amount);
+        SGETH.deposit{value: _amount}();
+    }
+
+    function _convertSgethToWeth(uint256 _amount) internal {
+        console.log("balance");
+        console.log(SGETH.balanceOf(address(this)));
+        SGETH.withdraw(_amount);
+        WETH(payable(address(asset))).deposit{value: _amount}();
     }
 
     function _convertAssetToLP(uint256 _amount) internal view returns (uint256) {

@@ -1,33 +1,38 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.9;
 
-import "test/TestHelpers.sol";
+import "../TestHelpers.sol";
+import "solmate/tokens/ERC20.sol";
 import "src/Vault.sol";
-import "src/Strategy.sol";
+import "src/strategies/WethStrategyStargate.sol";
 import "src/Swap.sol";
 import "src/zaps/WethZap.sol";
 
-abstract contract WethStrategyTest is TestHelpers {
+contract WethStrategyStargateTest is TestHelpers {
     Vault vault;
     WethZap zap;
-    Strategy strategy;
+    WethStrategyStargate strategy;
     Swap swap;
 
-    address constant u1 = address(0xABCDEF);
-    address constant treasury = address(0xAAAAAF);
+    address constant u1 = address(0xABCD);
+    address constant treasury = address(0xAAAF);
+
     ERC20 constant WETH9 = ERC20(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2);
 
     // 0.001 WETH
     uint256 internal constant lowerLimit = 1e15;
     // 1000 WETH
-    uint256 internal constant upperLimit = 1e21;
+    uint256 internal constant upperLimit = 1000e18;
 
-    function setUp() public virtual {
+    ERC20 constant STG = ERC20(0xAf5191B0De278C7286d6C7CC6ab6BB8A73bA2Cd6);
+
+    function setUp() public {
         vault = new Vault(WETH9, 0, 0, address(0), address(this), new address[](0));
         swap = new Swap();
         zap = new WethZap(vault);
 
-        // override, super.setUp(), deploy strategy, then add strategy to vault
+        strategy = new WethStrategyStargate(vault, treasury, address(0), address(this), new address[](0), swap);
+        vault.addStrategy(strategy, 100);
     }
 
     /*///////////////////
@@ -41,6 +46,9 @@ abstract contract WethStrategyTest is TestHelpers {
         vm.stopPrank();
     }
 
+    // to receive ETH refund from redeemLocal
+    receive() external payable {}
+
     /*/////////////////
     /      Tests      /
     /////////////////*/
@@ -53,7 +61,7 @@ abstract contract WethStrategyTest is TestHelpers {
         assertEq(vault.totalAssets(), amount);
 
         vault.report(strategy);
-        assertCloseTo(strategy.totalAssets(), amount, 10); // 1%
+        assertVeryCloseTo(strategy.totalAssets(), amount, 1); // 0.001%
     }
 
     function testWithdraw(uint256 amount) public {
@@ -64,10 +72,9 @@ abstract contract WethStrategyTest is TestHelpers {
         vault.report(strategy);
 
         vm.startPrank(u1);
-        vault.approve(address(zap), type(uint256).max);
-        zap.redeemETH(vault.balanceOf(u1), u1, u1);
+        vault.redeem(vault.balanceOf(u1), u1, u1);
 
-        assertCloseTo(address(u1).balance, amount, 10); // 1%
+        assertVeryCloseTo(WETH9.balanceOf(u1), amount, 1); // 0.001%
     }
 
     function testHarvest(uint256 amount) public {
@@ -79,14 +86,27 @@ abstract contract WethStrategyTest is TestHelpers {
 
         uint256 startingAssets = strategy.totalAssets();
 
-        assertEq(WETH9.balanceOf(treasury), 0);
+        assertEq(STG.balanceOf(treasury), 0);
 
-        vm.warp(block.timestamp + 14 days);
-        vm.roll(block.number + 5);
+        vm.roll(block.number + 10_000);
 
         vault.harvest(strategy);
 
-        assertGt(strategy.totalAssets(), startingAssets);
+        assertGe(strategy.totalAssets(), startingAssets);
         assertGt(WETH9.balanceOf(treasury), 0);
+    }
+
+    function testManualWithdraw(uint256 amount) public {
+        vm.assume(amount >= lowerLimit && amount <= upperLimit);
+
+        depositWeth(u1, amount, u1);
+
+        vault.report(strategy);
+
+        strategy.manualWithdraw{value: 1e18}(
+            110,
+            amount,
+            IStargateRouter.lzTxObj({dstGasForCall: 0, dstNativeAmount: 0, dstNativeAddr: abi.encodePacked(address(0))})
+        );
     }
 }
