@@ -21,8 +21,8 @@ contract WethStrategyStargateTest is TestHelpers {
 
     // 0.001 WETH
     uint256 internal constant lowerLimit = 1e15;
-    // 1000 WETH
-    uint256 internal constant upperLimit = 1000e18;
+    // 100 WETH
+    uint256 internal constant upperLimit = 100 * 1e18;
 
     ERC20 constant STG = ERC20(0xAf5191B0De278C7286d6C7CC6ab6BB8A73bA2Cd6);
 

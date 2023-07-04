@@ -58,12 +58,3 @@ interface IStargateRouter {
         lzTxObj memory _lzTxParams
     ) external view returns (uint256, uint256);
 }
-
-// essentially WETH but with extra unwrap on transfer functionality
-interface ISGETH {
-    function approve(address spender, uint256 amount) external returns (bool);
-
-    function deposit() external payable;
-
-    function withdraw(uint256 amount) external;
-}

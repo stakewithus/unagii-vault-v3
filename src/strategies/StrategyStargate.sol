@@ -50,9 +50,6 @@ abstract contract StrategyStargate is Strategy {
         _approve();
     }
 
-    // strategy receives refunds
-    receive() external payable {}
-
     /*///////////////////////
     /      Public View      /
     ///////////////////////*/

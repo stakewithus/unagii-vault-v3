@@ -17,7 +17,11 @@ contract WethStrategyStargate is Strategy {
     IStargateRouter internal constant router = IStargateRouter(0x8731d54E9D02c286767d56ac03e8037C07e01e98);
     ILPStaking internal constant staking = ILPStaking(0xB0D502E938ed5f4df2E681fE6E419ff29631d62b);
     ERC20 internal constant STG = ERC20(0xAf5191B0De278C7286d6C7CC6ab6BB8A73bA2Cd6);
+
+    /// @dev Stargate's version of WETH that automatically unwraps on transfer. Annoyingly, not canonical WETH
     WETH internal constant SGETH = WETH(payable(0x72E2F4830b9E45d52F80aC08CB2bEC0FeF72eD9c));
+    /// @dev canonical WETH
+    WETH internal constant WETH9 = WETH(payable(0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2));
 
     /// @dev pid of asset in their router
     uint16 public constant routerPoolId = 13;
@@ -35,6 +39,7 @@ contract WethStrategyStargate is Strategy {
     error NoRewards();
     error NothingToInvest();
     error BelowMinimum(uint256);
+    error InvalidAsset();
 
     constructor(
         Vault _vault,
@@ -46,11 +51,19 @@ contract WethStrategyStargate is Strategy {
     ) Strategy(_vault, _treasury, _nominatedOwner, _admin, _authorized) {
         swap = _swap;
 
+        if (address(_vault.asset()) != address(WETH9)) revert InvalidAsset();
+
         _approve();
     }
 
-    // strategy receives refunds
-    receive() external payable {}
+    receive() external payable {
+        if (msg.sender == address(WETH9)) return; // do nothing when unwrapping WETH
+
+        // SGETH automatically unwraps to ETH upon transfer in `redeemLocal` and `instantRedeemLocal`. We wrap and send
+        // WETH from other sources (namely router) to vault as ETH.
+        WETH9.deposit{value: msg.value}();
+        asset.safeTransfer(address(vault), msg.value);
+    }
 
     /*///////////////////////
     /      Public View      /
@@ -81,8 +94,8 @@ contract WethStrategyStargate is Strategy {
     }
 
     /**
-     * @notice manually withdraw to vault if insufficient delta in Stargate local pool
-     * 	@dev use router.quoteLayerZeroFee to estimate 'msg.value' (excess will be refunded)
+     * @notice Safeguard to manually withdraw if insufficient delta in Stargate local pool.
+     * 	@dev Use router.quoteLayerZeroFee to estimate 'msg.value' (excess will be refunded to `msg.sender`).
      * 	@param _dstChainId STG chainId, see https://stargateprotocol.gitbook.io/stargate/developers/contract-addresses/mainnet, ideally we want to use the chain with cheapest gas
      * 	@param _assets amount of LP to redeem, use type(uint256).max to withdraw everything
      * 	@param _lzTxObj usually can just be (0, 0, "0x")
@@ -103,9 +116,9 @@ contract WethStrategyStargate is Strategy {
             _dstChainId,
             routerPoolId,
             routerPoolId,
-            payable(address(this)),
+            payable(msg.sender),
             lpAmount,
-            abi.encodePacked(address(vault)),
+            abi.encodePacked(address(this)),
             _lzTxObj
         );
     }
@@ -125,12 +138,7 @@ contract WethStrategyStargate is Strategy {
 
         // withdraw from stargate router
         received = router.instantRedeemLocal(routerPoolId, lpAmount, address(this));
-
         if (received < _calculateSlippage(_assets)) revert BelowMinimum(received);
-
-        // router instantRedeemLocal withdraws and unwraps to raw ETH
-        WETH(payable(address(asset))).deposit{value: received}();
-        asset.safeTransfer(address(vault), received);
     }
 
     function _harvest() internal override {
@@ -147,7 +155,8 @@ contract WethStrategyStargate is Strategy {
         uint256 assetBalance = asset.balanceOf(address(this));
         if (assetBalance == 0) revert NothingToInvest();
 
-        _convertWethToSgeth(assetBalance);
+        WETH9.withdraw(assetBalance);
+        SGETH.deposit{value: assetBalance}();
 
         router.addLiquidity(routerPoolId, assetBalance, address(this));
 
@@ -164,7 +173,7 @@ contract WethStrategyStargate is Strategy {
 
     function _approve() internal {
         // approve deposit SGETH into router
-        SGETH.approve(address(router), type(uint256).max);
+        SGETH.safeApprove(address(router), type(uint256).max);
         // approve deposit lpToken into staking contract
         lpToken.safeApprove(address(staking), type(uint256).max);
 
@@ -172,7 +181,7 @@ contract WethStrategyStargate is Strategy {
     }
 
     function _unapprove() internal {
-        SGETH.approve(address(router), 0);
+        SGETH.safeApprove(address(router), 0);
         lpToken.safeApprove(address(staking), 0);
 
         _unapproveSwap();
@@ -186,18 +195,6 @@ contract WethStrategyStargate is Strategy {
     // approve swap rewards to asset
     function _approveSwap() internal {
         STG.safeApprove(address(swap), type(uint256).max);
-    }
-
-    function _convertWethToSgeth(uint256 _amount) internal {
-        WETH(payable(address(asset))).withdraw(_amount);
-        SGETH.deposit{value: _amount}();
-    }
-
-    function _convertSgethToWeth(uint256 _amount) internal {
-        console.log("balance");
-        console.log(SGETH.balanceOf(address(this)));
-        SGETH.withdraw(_amount);
-        WETH(payable(address(asset))).deposit{value: _amount}();
     }
 
     function _convertAssetToLP(uint256 _amount) internal view returns (uint256) {
