@@ -71,7 +71,7 @@ contract WethStrategyConvexStEthTest is TestHelpers {
 
         vm.startPrank(u1);
         vault.approve(address(zap), type(uint256).max);
-        zap.redeemETH(vault.balanceOf(u1), u1, u1);
+        zap.redeemETH(vault.balanceOf(u1));
 
         assertCloseTo(address(u1).balance, amount, 10); // 1%
     }
