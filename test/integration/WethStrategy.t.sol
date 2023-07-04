@@ -82,7 +82,6 @@ abstract contract WethStrategyTest is TestHelpers {
         assertEq(WETH9.balanceOf(treasury), 0);
 
         vm.warp(block.timestamp + 14 days);
-        vm.roll(block.number + 5);
 
         vault.harvest(strategy);
 
