@@ -90,60 +90,47 @@ contract Swap is Ownable {
 
         _setRoute(USDC, USDT, RouteInfo({route: Route.UniswapV3Direct, info: abi.encode(uint24(100))}));
 
-        IAsset[] memory assets = new IAsset[](4);
-        assets[0] = IAsset(STG);
-        assets[1] = IAsset(0xA13a9247ea42D743238089903570127DdA72fE44); // bb-a-USD
-        assets[2] = IAsset(0x82698aeCc9E28e9Bb27608Bd52cF57f704BD1B83); // bb-a-USDC
-        assets[3] = IAsset(USDC);
+        // STG -> bb-a-USD -> bb-a-USDC -> USDC
+        IAsset[] memory stgUsdcAssets = new IAsset[](4);
+        stgUsdcAssets[0] = IAsset(STG);
+        stgUsdcAssets[1] = IAsset(0xfeBb0bbf162E64fb9D0dfe186E517d84C395f016); // bb-a-USD
+        stgUsdcAssets[2] = IAsset(0xcbFA4532D8B2ade2C261D3DD5ef2A2284f792692); // bb-a-USDC
+        stgUsdcAssets[3] = IAsset(USDC);
 
-        IVault.BatchSwapStep[] memory steps = new IVault.BatchSwapStep[](3);
+        bytes32[] memory stgUsdcPoolIds = new bytes32[](3);
+        stgUsdcPoolIds[0] = 0x639883476960a23b38579acfd7d71561a0f408cf000200000000000000000505; // STG -> bb-a-USD
+        stgUsdcPoolIds[1] = 0xfebb0bbf162e64fb9d0dfe186e517d84c395f016000000000000000000000502; // bb-a-USD -> bb-a-USDC
+        stgUsdcPoolIds[2] = 0xcbfa4532d8b2ade2c261d3dd5ef2a2284f7926920000000000000000000004fa; // bb-a-USDC -> USDC
 
-        // STG -> bb-a-USD
-        steps[0] = IVault.BatchSwapStep({
-            poolId: 0x4ce0bd7debf13434d3ae127430e9bd4291bfb61f00020000000000000000038b,
-            assetInIndex: 0,
-            assetOutIndex: 1,
-            amount: 0,
-            userData: ""
-        });
+        IVault.BatchSwapStep[] memory stgUsdcSteps = _constructBalancerBatchSwapSteps(stgUsdcPoolIds);
 
-        // bb-a-USD -> bb-a-USDC
-        steps[1] = IVault.BatchSwapStep({
-            poolId: 0xa13a9247ea42d743238089903570127dda72fe4400000000000000000000035d,
-            assetInIndex: 1,
-            assetOutIndex: 2,
-            amount: 0,
-            userData: ""
-        });
+        _setRoute(STG, USDC, RouteInfo({route: Route.BalancerBatch, info: abi.encode(stgUsdcSteps, stgUsdcAssets)}));
 
-        // bb-a-USDC -> USDC
-        steps[2] = IVault.BatchSwapStep({
-            poolId: 0x82698aecc9e28e9bb27608bd52cf57f704bd1b83000000000000000000000336,
-            assetInIndex: 2,
-            assetOutIndex: 3,
-            amount: 0,
-            userData: ""
-        });
+        // STG -> bb-a-USD -> wstETH -> WETH
+        IAsset[] memory stgWethAssets = new IAsset[](6);
+        stgWethAssets[0] = IAsset(STG);
+        stgWethAssets[1] = IAsset(0xfeBb0bbf162E64fb9D0dfe186E517d84C395f016); // bb-a-USD
+        stgWethAssets[2] = IAsset(0xcbFA4532D8B2ade2C261D3DD5ef2A2284f792692); // bb-a-USDC
+        stgWethAssets[3] = IAsset(USDC);
+        stgWethAssets[4] = IAsset(0x79c58f70905F734641735BC61e45c19dD9Ad60bC); // USDC-DAI-USDT
+        stgWethAssets[5] = IAsset(WETH);
 
-        _setRoute(STG, USDC, RouteInfo({route: Route.BalancerBatch, info: abi.encode(steps, assets)}));
+        bytes32[] memory stgWethPoolIds = new bytes32[](5);
+        stgWethPoolIds[0] = 0x639883476960a23b38579acfd7d71561a0f408cf000200000000000000000505; // STG -> bb-a-USD
+        stgWethPoolIds[1] = 0xfebb0bbf162e64fb9d0dfe186e517d84c395f016000000000000000000000502; // bb-a-USD -> bb-a-USDC
+        stgWethPoolIds[2] = 0xcbfa4532d8b2ade2c261d3dd5ef2a2284f7926920000000000000000000004fa; // bb-a-USDC -> USDC
+        stgWethPoolIds[3] = 0x79c58f70905f734641735bc61e45c19dd9ad60bc0000000000000000000004e7; // USDC -> USDC-DAI-USDT
+        stgWethPoolIds[4] = 0x08775ccb6674d6bdceb0797c364c2653ed84f3840002000000000000000004f0; // USDC-DAI-USDT -> WETH
 
-        _setRoute(
-            BAL,
-            WETH,
-            RouteInfo({
-                route: Route.BalancerSingle,
-                info: abi.encode(0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014)
-            })
-        );
+        IVault.BatchSwapStep[] memory stgWethSteps = _constructBalancerBatchSwapSteps(stgWethPoolIds);
 
-        _setRoute(
-            AURA,
-            WETH,
-            RouteInfo({
-                route: Route.BalancerSingle,
-                info: abi.encode(0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274)
-            })
-        );
+        _setRoute(STG, WETH, RouteInfo({route: Route.BalancerBatch, info: abi.encode(stgWethSteps, stgWethAssets)}));
+
+        bytes32 balWethPoolId = 0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014;
+        _setRoute(BAL, WETH, RouteInfo({route: Route.BalancerSingle, info: abi.encode(balWethPoolId)}));
+
+        bytes32 auraWethPoolId = 0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274;
+        _setRoute(AURA, WETH, RouteInfo({route: Route.BalancerSingle, info: abi.encode(auraWethPoolId)}));
     }
 
     /*///////////////////////
@@ -365,6 +352,25 @@ contract Swap is Ownable {
             return address(balancer);
         } else {
             revert InvalidRouteInfo();
+        }
+    }
+
+    function _constructBalancerBatchSwapSteps(bytes32[] memory _poolIds)
+        internal
+        pure
+        returns (IVault.BatchSwapStep[] memory steps)
+    {
+        uint256 length = _poolIds.length;
+        steps = new IVault.BatchSwapStep[](length);
+
+        for (uint8 i = 0; i < length; ++i) {
+            steps[i] = IVault.BatchSwapStep({
+                poolId: _poolIds[i],
+                assetInIndex: i,
+                assetOutIndex: i + 1,
+                amount: 0,
+                userData: ""
+            });
         }
     }
 }
