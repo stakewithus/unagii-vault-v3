@@ -1,5 +1,6 @@
 {
 	"solidity.packageDefaultDependenciesDirectory": "lib",
 	"solidity.packageDefaultDependenciesContractsDirectory": "src",
-	"solidity.compileUsingRemoteVersion": "0.8.9"
+	"solidity.compileUsingRemoteVersion": "0.8.9",
+	"solidity.formatter": "forge"
 }
