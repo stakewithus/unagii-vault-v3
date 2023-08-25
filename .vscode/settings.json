@@ -2,9 +2,5 @@
 	"solidity.packageDefaultDependenciesDirectory": "lib",
 	"solidity.packageDefaultDependenciesContractsDirectory": "src",
 	"solidity.compileUsingRemoteVersion": "0.8.9",
-	"solidity.remappings": [
-		"ds-test/=lib/solmate/lib/ds-test/src/",
-		"forge-std/=lib/forge-std/src/",
-		"solmate/=lib/solmate/src/"
-	]
+	"solidity.formatter": "forge"
 }
