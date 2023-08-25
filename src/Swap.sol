@@ -98,24 +98,26 @@ contract Swap is Ownable {
                 info: abi.encode(0x3ff3a210e57cfe679d9ad1e9ba6453a716c56a2e0002000000000000000005d5)
             })
         );
+        IAsset[] memory stgWethAssets = new IAsset[](4);
+        stgWethAssets[0] = IAsset(STG);
+        stgWethAssets[1] = IAsset(USDC);
+        stgWethAssets[2] = IAsset(0x79c58f70905F734641735BC61e45c19dD9Ad60bC); // 3pool
+        stgWethAssets[3] = IAsset(WETH);
 
-        _setRoute(
-            BAL,
-            WETH,
-            RouteInfo({
-                route: Route.BalancerSingle,
-                info: abi.encode(0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014)
-            })
-        );
+        bytes32[] memory stgWethPoolIds = new bytes32[](3);
+        stgWethPoolIds[0] = 0x3ff3a210e57cfe679d9ad1e9ba6453a716c56a2e0002000000000000000005d5; // STG/USDC
+        stgWethPoolIds[1] = 0x79c58f70905f734641735bc61e45c19dd9ad60bc0000000000000000000004e7; // 3pool
+        stgWethPoolIds[2] = 0x08775ccb6674d6bdceb0797c364c2653ed84f3840002000000000000000004f0; // 3pool/WETH
 
-        _setRoute(
-            AURA,
-            WETH,
-            RouteInfo({
-                route: Route.BalancerSingle,
-                info: abi.encode(0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274)
-            })
-        );
+        IVault.BatchSwapStep[] memory stgWethSteps = _constructBalancerBatchSwapSteps(stgWethPoolIds);
+
+        _setRoute(STG, WETH, RouteInfo({route: Route.BalancerBatch, info: abi.encode(stgWethSteps, stgWethAssets)}));
+
+        bytes32 balWethPoolId = 0x5c6ee304399dbdb9c8ef030ab642b10820db8f56000200000000000000000014;
+        _setRoute(BAL, WETH, RouteInfo({route: Route.BalancerSingle, info: abi.encode(balWethPoolId)}));
+
+        bytes32 auraWethPoolId = 0xcfca23ca9ca720b6e98e3eb9b6aa0ffc4a5c08b9000200000000000000000274;
+        _setRoute(AURA, WETH, RouteInfo({route: Route.BalancerSingle, info: abi.encode(auraWethPoolId)}));
     }
 
     /*///////////////////////
@@ -337,6 +339,25 @@ contract Swap is Ownable {
             return address(balancer);
         } else {
             revert InvalidRouteInfo();
+        }
+    }
+
+    function _constructBalancerBatchSwapSteps(bytes32[] memory _poolIds)
+        internal
+        pure
+        returns (IVault.BatchSwapStep[] memory steps)
+    {
+        uint256 length = _poolIds.length;
+        steps = new IVault.BatchSwapStep[](length);
+
+        for (uint8 i = 0; i < length; ++i) {
+            steps[i] = IVault.BatchSwapStep({
+                poolId: _poolIds[i],
+                assetInIndex: i,
+                assetOutIndex: i + 1,
+                amount: 0,
+                userData: ""
+            });
         }
     }
 }
